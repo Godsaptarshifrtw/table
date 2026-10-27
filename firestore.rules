@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions for auth verification
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isStaff() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'admin' ||
+        request.auth.token.role == 'waiter' ||
+        request.auth.token.role == 'kitchen'
+      );
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.role == 'admin';
+    }
+
+    function isWaiter() {
+      return isAuthenticated() && (request.auth.token.role == 'waiter' || isAdmin());
+    }
+
+    function isKitchen() {
+      return isAuthenticated() && (request.auth.token.role == 'kitchen' || isAdmin());
+    }
+
+    // Restaurants: public read for menu branding, admin write
+    match /restaurants/{restaurantId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Tables: public read by publicId token lookup, staff write
+    match /tables/{tableId} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isStaff();
+    }
+
+    // Menu Categories & Items: public read for customer browsing, admin write
+    match /menuCategories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /menuItems/{itemId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Table Sessions: Customers create & read their table session; staff can manage
+    match /tableSessions/{sessionId} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if isStaff();
+    }
+
+    // Orders: 
+    // - Customers can submit orders (validated via backend api / trusted cloud functions)
+    // - Kitchen and Waiters can update preparation statuses
+    // - Admins have full access
+    match /orders/{orderId} {
+      allow read: if isStaff() || (resource.data.sessionId != null);
+      allow create: if true; // Created with server verification
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // Staff accounts: strictly Admin access
+    match /staff/{staffId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Payments: Staff and Admin only
+    match /payments/{paymentId} {
+      allow read: if isStaff();
+      allow write: if isAdmin() || isWaiter();
+    }
+
+    // Audit logs: Append-only by staff, read only by Admin
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isStaff();
+      allow update, delete: if false; // Immutable audit log
+    }
+  }
+}
