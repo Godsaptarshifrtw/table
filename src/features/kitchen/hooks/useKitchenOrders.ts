@@ -1,10 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Order } from "@/types";
+import type { Order, ItemPreparationStatus } from "@/types";
 import { useAuth } from "@/context/AuthContext";
-
-type ItemStatus = "pending" | "preparing" | "ready" | "served";
 
 export function useKitchenOrders(soundEnabled: boolean) {
   const { staff } = useAuth();
@@ -71,7 +69,7 @@ export function useKitchenOrders(soundEnabled: boolean) {
     async (
       orderId: string,
       itemId: string,
-      newStatus: ItemStatus
+      newStatus: ItemPreparationStatus
     ): Promise<boolean> => {
       if (!staff?.id) {
         setError("Please log in before updating order status.");
