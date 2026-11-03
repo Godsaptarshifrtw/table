@@ -70,7 +70,21 @@ export async function syncFirestoreWithStore(): Promise<void> {
 
       const menuSnap = await adminDb.collection("menuItems").get();
       if (!menuSnap.empty) {
-        store.menuItems = menuSnap.docs.map((d) => d.data() as MenuItem);
+        const fetchedItems = menuSnap.docs.map((d) => d.data() as MenuItem);
+        const hasOutdatedData = fetchedItems.some(
+          (item) => !item.currency || item.currency === "USD" || item.price < 50
+        );
+        if (hasOutdatedData) {
+          console.log("[Firestore] Updating menu items in Firestore to INR pricing...");
+          const batch = adminDb.batch();
+          for (const item of store.menuItems) {
+            const itemRef = adminDb.collection("menuItems").doc(item.id);
+            batch.set(itemRef, item);
+          }
+          await batch.commit();
+        } else {
+          store.menuItems = fetchedItems;
+        }
       }
 
       const ordersSnap = await adminDb.collection("orders").orderBy("createdAt", "desc").limit(100).get();
