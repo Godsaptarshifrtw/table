@@ -8,30 +8,47 @@ function formatPrivateKey(key?: string) {
   return key.replace(/\\n/g, "\n");
 }
 
-let app: App;
+const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+const rawPrivateKey = process.env.FIREBASE_PRIVATE_KEY;
+const privateKey = formatPrivateKey(rawPrivateKey);
+const projectId =
+  process.env.FIREBASE_PROJECT_ID ||
+  process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ||
+  "table-b3614";
 
-if (getApps().length === 0) {
-  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "table-qr-demo";
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = formatPrivateKey(process.env.FIREBASE_PRIVATE_KEY);
+export const isFirebaseAdminConfigured = Boolean(clientEmail && privateKey);
 
-  if (clientEmail && privateKey) {
-    app = initializeApp({
-      credential: cert({
-        projectId,
-        clientEmail,
-        privateKey,
-      }),
-    });
-  } else {
-    app = initializeApp({
-      projectId,
-    });
+let app: App | undefined;
+let adminAuthInstance: Auth | undefined;
+let adminDbInstance: Firestore | undefined;
+let adminStorageInstance: Storage | undefined;
+
+if (isFirebaseAdminConfigured) {
+  try {
+    if (getApps().length === 0) {
+      app = initializeApp({
+        credential: cert({
+          projectId,
+          clientEmail: clientEmail!,
+          privateKey: privateKey!,
+        }),
+      });
+    } else {
+      app = getApps()[0];
+    }
+
+    adminAuthInstance = getAuth(app);
+    adminDbInstance = getFirestore(app);
+    adminStorageInstance = getStorage(app);
+    console.log("[Firebase Admin] Initialized with Service Account credentials.");
+  } catch (error) {
+    console.warn("[Firebase Admin] Initialization failed, falling back to local memory store:", error);
   }
 } else {
-  app = getApps()[0];
+  // Graceful no-op fallback when running locally with Firebase Web Client SDK only
+  // This prevents GCP metadata server timeouts (ETIMEDOUT / ENOTFOUND 169.254.169.254)
 }
 
-export const adminAuth: Auth = getAuth(app);
-export const adminDb: Firestore = getFirestore(app);
-export const adminStorage: Storage = getStorage(app);
+export const adminAuth = (adminAuthInstance || {}) as Auth;
+export const adminDb = (adminDbInstance || {}) as Firestore;
+export const adminStorage = (adminStorageInstance || {}) as Storage;

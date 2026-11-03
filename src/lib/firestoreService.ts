@@ -1,4 +1,4 @@
-import { adminDb } from "@/lib/firebase/admin";
+import { adminDb, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import {
   Restaurant,
   Table,
@@ -19,7 +19,10 @@ import { getStore } from "./serverStore";
 let initializedFirestore = false;
 
 export async function syncFirestoreWithStore(): Promise<void> {
-  if (initializedFirestore) return;
+  if (initializedFirestore || !isFirebaseAdminConfigured) {
+    initializedFirestore = true;
+    return;
+  }
   try {
     const restDoc = await adminDb.collection("restaurants").doc("rest_default_01").get();
     const store = getStore();
@@ -103,6 +106,7 @@ export async function syncFirestoreWithStore(): Promise<void> {
 
 // Helpers to persist mutations to Firestore in background
 export async function persistOrderToFirestore(order: Order, session?: TableSession): Promise<void> {
+  if (!isFirebaseAdminConfigured) return;
   try {
     const batch = adminDb.batch();
     const orderRef = adminDb.collection("orders").doc(order.id);
@@ -119,6 +123,7 @@ export async function persistOrderToFirestore(order: Order, session?: TableSessi
 }
 
 export async function persistTableToFirestore(table: Table): Promise<void> {
+  if (!isFirebaseAdminConfigured) return;
   try {
     await adminDb.collection("tables").doc(table.id).set(table, { merge: true });
   } catch (err) {
@@ -127,6 +132,7 @@ export async function persistTableToFirestore(table: Table): Promise<void> {
 }
 
 export async function persistSessionToFirestore(session: TableSession): Promise<void> {
+  if (!isFirebaseAdminConfigured) return;
   try {
     await adminDb.collection("tableSessions").doc(session.id).set(session, { merge: true });
   } catch (err) {
@@ -135,6 +141,7 @@ export async function persistSessionToFirestore(session: TableSession): Promise<
 }
 
 export async function persistAuditLogToFirestore(log: AuditLog): Promise<void> {
+  if (!isFirebaseAdminConfigured) return;
   try {
     await adminDb.collection("auditLogs").doc(log.id).set(log);
   } catch (err) {

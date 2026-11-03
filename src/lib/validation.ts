@@ -7,7 +7,7 @@ export const CreateOrderRequestItemSchema = z.object({
 });
 
 export const CreateOrderRequestSchema = z.object({
-  restaurantId: z.string().min(1, "Restaurant ID is required"),
+  restaurantId: z.string().optional(),
   tablePublicId: z.string().min(1, "Table ID is required"),
   items: z.array(CreateOrderRequestItemSchema).min(1, "At least one item is required to place an order"),
   source: z.enum(["qr", "waiter"]).default("qr"),

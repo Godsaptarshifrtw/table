@@ -184,13 +184,15 @@ export default function CustomerMenuPage({
     setOrderSubmitting(true);
     try {
       const orderPayload = {
+        restaurantId: restaurant?.id || "rest_default_01",
         tablePublicId,
+        source: "qr",
         items: cart.map((c) => ({
           menuItemId: c.menuItem.id,
           quantity: c.quantity,
-          specialInstructions: c.specialInstructions || "",
+          specialInstructions: c.specialInstructions?.trim() || "",
         })),
-        customerNotes: "Customer Order via QR Digital Menu",
+        specialInstructions: "Customer Order via QR Digital Menu",
       };
 
       const res = await fetch("/api/orders", {
@@ -201,7 +203,8 @@ export default function CustomerMenuPage({
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        alert(data.error || "Order submission failed. Please try again.");
+        const errorMsg = data.error || (data.details ? Object.values(data.details).join(", ") : "Order submission failed.");
+        alert(errorMsg);
         return;
       }
 
