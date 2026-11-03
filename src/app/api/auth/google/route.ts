@@ -3,6 +3,8 @@ import { getStore } from "@/lib/serverStore";
 import { Staff } from "@/types";
 import { adminDb, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
   try {
     const { email, displayName, uid, photoURL, requestedRole } = await req.json();

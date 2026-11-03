@@ -2,9 +2,15 @@ import { NextResponse } from "next/server";
 import { getStore } from "@/lib/serverStore";
 import { syncFirestoreWithStore } from "@/lib/firestoreService";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
-    await syncFirestoreWithStore().catch(console.error);
+    try {
+      await syncFirestoreWithStore();
+    } catch (e) {
+      console.warn("Firestore sync skipped:", e);
+    }
     const store = getStore();
     return NextResponse.json({
       success: true,

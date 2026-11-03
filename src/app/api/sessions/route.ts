@@ -3,9 +3,11 @@ import { getStore } from "@/lib/serverStore";
 import { BillRequestSchema, CloseSessionSchema } from "@/lib/validation";
 import { persistSessionToFirestore, persistTableToFirestore, persistAuditLogToFirestore, syncFirestoreWithStore } from "@/lib/firestoreService";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
+    const searchParams = req.nextUrl?.searchParams || new URL(req.url, "http://localhost:3000").searchParams;
     const sessionId = searchParams.get("sessionId");
     const tableId = searchParams.get("tableId");
 

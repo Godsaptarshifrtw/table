@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStore } from "@/lib/serverStore";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
   try {
     const { email, role } = await req.json();

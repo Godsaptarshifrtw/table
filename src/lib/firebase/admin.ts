@@ -5,10 +5,18 @@ import { getStorage, Storage } from "firebase-admin/storage";
 
 function formatPrivateKey(key?: string) {
   if (!key) return undefined;
-  return key.replace(/\\n/g, "\n");
+  let formatted = key.replace(/\\n/g, "\n").trim();
+  // Strip outer quotes if pasted with quotes
+  if (
+    (formatted.startsWith('"') && formatted.endsWith('"')) ||
+    (formatted.startsWith("'") && formatted.endsWith("'"))
+  ) {
+    formatted = formatted.slice(1, -1);
+  }
+  return formatted;
 }
 
-const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
 const rawPrivateKey = process.env.FIREBASE_PRIVATE_KEY;
 const privateKey = formatPrivateKey(rawPrivateKey);
 const projectId =
@@ -16,21 +24,25 @@ const projectId =
   process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ||
   "table-b3614";
 
-export const isFirebaseAdminConfigured = Boolean(clientEmail && privateKey);
-
 let app: App | undefined;
 let adminAuthInstance: Auth | undefined;
 let adminDbInstance: Firestore | undefined;
 let adminStorageInstance: Storage | undefined;
 
-if (isFirebaseAdminConfigured) {
+// Only attempt initialization if email and private key are valid strings
+if (
+  clientEmail &&
+  privateKey &&
+  clientEmail.length > 5 &&
+  privateKey.includes("BEGIN PRIVATE KEY")
+) {
   try {
     if (getApps().length === 0) {
       app = initializeApp({
         credential: cert({
           projectId,
-          clientEmail: clientEmail!,
-          privateKey: privateKey!,
+          clientEmail,
+          privateKey,
         }),
       });
     } else {
@@ -42,12 +54,17 @@ if (isFirebaseAdminConfigured) {
     adminStorageInstance = getStorage(app);
     console.log("[Firebase Admin] Initialized with Service Account credentials.");
   } catch (error) {
-    console.warn("[Firebase Admin] Initialization failed, falling back to local memory store:", error);
+    console.warn("[Firebase Admin] Initialization failed, using local store fallback:", error);
+    adminAuthInstance = undefined;
+    adminDbInstance = undefined;
+    adminStorageInstance = undefined;
   }
-} else {
-  // Graceful no-op fallback when running locally with Firebase Web Client SDK only
-  // This prevents GCP metadata server timeouts (ETIMEDOUT / ENOTFOUND 169.254.169.254)
 }
+
+// True ONLY when adminDbInstance is successfully initialized and has collection method
+export const isFirebaseAdminConfigured = Boolean(
+  adminDbInstance && typeof adminDbInstance.collection === "function"
+);
 
 export const adminAuth = (adminAuthInstance || {}) as Auth;
 export const adminDb = (adminDbInstance || {}) as Firestore;

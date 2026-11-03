@@ -4,6 +4,8 @@ import { CreateOrderRequestSchema } from "@/lib/validation";
 import { Order, OrderItem, TableSession } from "@/types";
 import { syncFirestoreWithStore, persistOrderToFirestore, persistTableToFirestore, persistAuditLogToFirestore } from "@/lib/firestoreService";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -179,14 +181,19 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    await syncFirestoreWithStore().catch(console.error);
-    const { searchParams } = new URL(req.url);
+    try {
+      await syncFirestoreWithStore();
+    } catch (e) {
+      console.warn("Firestore sync skipped:", e);
+    }
+
+    const searchParams = req.nextUrl?.searchParams || new URL(req.url, "http://localhost:3000").searchParams;
     const tableId = searchParams.get("tableId");
     const sessionId = searchParams.get("sessionId");
     const status = searchParams.get("status");
 
     const store = getStore();
-    let result = [...store.orders];
+    let result = [...(store.orders || [])];
 
     if (tableId) {
       result = result.filter((o) => o.tableId === tableId);

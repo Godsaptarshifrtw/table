@@ -4,9 +4,15 @@ import { TableManagementSchema } from "@/lib/validation";
 import { Table } from "@/types";
 import { syncFirestoreWithStore, persistTableToFirestore, persistAuditLogToFirestore } from "@/lib/firestoreService";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
-    await syncFirestoreWithStore().catch(console.error);
+    try {
+      await syncFirestoreWithStore();
+    } catch (e) {
+      console.warn("Firestore sync skipped:", e);
+    }
     const store = getStore();
 
     // Enrich table info with current active session totals & item count
