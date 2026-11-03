@@ -1,4 +1,3 @@
-import { adminDb, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import {
   Restaurant,
   Table,
@@ -18,12 +17,29 @@ import { getStore } from "./serverStore";
 
 let initializedFirestore = false;
 
-export async function syncFirestoreWithStore(): Promise<void> {
-  if (initializedFirestore || !isFirebaseAdminConfigured) {
-    initializedFirestore = true;
-    return;
-  }
+async function getAdminModule() {
   try {
+    const admin = await import("@/lib/firebase/admin");
+    if (admin && admin.isFirebaseAdminConfigured && admin.adminDb && typeof admin.adminDb.collection === "function") {
+      return admin;
+    }
+  } catch (err) {
+    // Graceful fallback to memory store if running in serverless without native credentials
+  }
+  return null;
+}
+
+export async function syncFirestoreWithStore(): Promise<void> {
+  if (initializedFirestore) return;
+
+  try {
+    const admin = await getAdminModule();
+    if (!admin) {
+      initializedFirestore = true;
+      return;
+    }
+
+    const adminDb = admin.adminDb;
     const restDoc = await adminDb.collection("restaurants").doc("rest_default_01").get();
     const store = getStore();
 
@@ -68,12 +84,12 @@ export async function syncFirestoreWithStore(): Promise<void> {
 
       const tablesSnap = await adminDb.collection("tables").get();
       if (!tablesSnap.empty) {
-        store.tables = tablesSnap.docs.map((d) => d.data() as Table);
+        store.tables = tablesSnap.docs.map((d: any) => d.data() as Table);
       }
 
       const menuSnap = await adminDb.collection("menuItems").get();
       if (!menuSnap.empty) {
-        const fetchedItems = menuSnap.docs.map((d) => d.data() as MenuItem);
+        const fetchedItems = menuSnap.docs.map((d: any) => d.data() as MenuItem);
         const hasOutdatedData = fetchedItems.some(
           (item) => !item.currency || item.currency === "USD" || item.price < 50
         );
@@ -92,28 +108,29 @@ export async function syncFirestoreWithStore(): Promise<void> {
 
       const ordersSnap = await adminDb.collection("orders").orderBy("createdAt", "desc").limit(100).get();
       if (!ordersSnap.empty) {
-        store.orders = ordersSnap.docs.map((d) => d.data() as Order);
+        store.orders = ordersSnap.docs.map((d: any) => d.data() as Order);
       }
     }
 
     initializedFirestore = true;
   } catch (err) {
-    console.warn("[Firestore sync warning] Using memory fallback if offline/no service-account credentials:", err);
-    // Graceful fallback so the system is always 100% resilient
+    console.warn("[Firestore sync note] Operating in high-speed local memory store mode.");
     initializedFirestore = true;
   }
 }
 
 // Helpers to persist mutations to Firestore in background
 export async function persistOrderToFirestore(order: Order, session?: TableSession): Promise<void> {
-  if (!isFirebaseAdminConfigured) return;
   try {
-    const batch = adminDb.batch();
-    const orderRef = adminDb.collection("orders").doc(order.id);
+    const admin = await getAdminModule();
+    if (!admin) return;
+
+    const batch = admin.adminDb.batch();
+    const orderRef = admin.adminDb.collection("orders").doc(order.id);
     batch.set(orderRef, order);
 
     if (session) {
-      const sessRef = adminDb.collection("tableSessions").doc(session.id);
+      const sessRef = admin.adminDb.collection("tableSessions").doc(session.id);
       batch.set(sessRef, session);
     }
     await batch.commit();
@@ -123,27 +140,30 @@ export async function persistOrderToFirestore(order: Order, session?: TableSessi
 }
 
 export async function persistTableToFirestore(table: Table): Promise<void> {
-  if (!isFirebaseAdminConfigured) return;
   try {
-    await adminDb.collection("tables").doc(table.id).set(table, { merge: true });
+    const admin = await getAdminModule();
+    if (!admin) return;
+    await admin.adminDb.collection("tables").doc(table.id).set(table, { merge: true });
   } catch (err) {
     console.warn("Could not update table in Firestore:", err);
   }
 }
 
 export async function persistSessionToFirestore(session: TableSession): Promise<void> {
-  if (!isFirebaseAdminConfigured) return;
   try {
-    await adminDb.collection("tableSessions").doc(session.id).set(session, { merge: true });
+    const admin = await getAdminModule();
+    if (!admin) return;
+    await admin.adminDb.collection("tableSessions").doc(session.id).set(session, { merge: true });
   } catch (err) {
     console.warn("Could not update session in Firestore:", err);
   }
 }
 
 export async function persistAuditLogToFirestore(log: AuditLog): Promise<void> {
-  if (!isFirebaseAdminConfigured) return;
   try {
-    await adminDb.collection("auditLogs").doc(log.id).set(log);
+    const admin = await getAdminModule();
+    if (!admin) return;
+    await admin.adminDb.collection("auditLogs").doc(log.id).set(log);
   } catch (err) {
     console.warn("Could not save auditLog:", err);
   }

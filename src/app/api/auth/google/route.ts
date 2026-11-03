@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStore } from "@/lib/serverStore";
 import { Staff } from "@/types";
-import { adminDb, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -32,12 +31,13 @@ export async function POST(req: NextRequest) {
       store.staff.push(staff);
 
       // Save to Cloud Firestore if Admin SDK credentials are provided
-      if (isFirebaseAdminConfigured) {
-        try {
-          await adminDb.collection("staff").doc(staff.id).set(staff, { merge: true });
-        } catch (e) {
-          console.warn("Could not save Google user to Firestore:", e);
+      try {
+        const admin = await import("@/lib/firebase/admin");
+        if (admin?.isFirebaseAdminConfigured && admin?.adminDb?.collection) {
+          await admin.adminDb.collection("staff").doc(staff.id).set(staff, { merge: true });
         }
+      } catch (e) {
+        console.warn("Could not save Google user to Firestore:", e);
       }
     }
 
