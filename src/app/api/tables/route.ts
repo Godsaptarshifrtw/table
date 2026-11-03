@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStore } from "@/lib/serverStore";
 import { TableManagementSchema } from "@/lib/validation";
 import { Table } from "@/types";
+import { syncFirestoreWithStore, persistTableToFirestore, persistAuditLogToFirestore } from "@/lib/firestoreService";
 
 export async function GET() {
   try {
+    await syncFirestoreWithStore().catch(console.error);
     const store = getStore();
 
     // Enrich table info with current active session totals & item count
@@ -78,16 +80,20 @@ export async function POST(req: NextRequest) {
 
     store.tables.push(newTable);
 
-    store.auditLogs.push({
+    const log = {
       id: `log_${Date.now()}`,
       restaurantId: store.restaurant.id,
       actorId: "admin",
       action: "table_created",
-      resourceType: "table",
+      resourceType: "table" as const,
       resourceId: newTable.id,
       metadata: { tableNumber, displayName },
       createdAt: new Date().toISOString(),
-    });
+    };
+    store.auditLogs.push(log);
+
+    persistTableToFirestore(newTable).catch(console.error);
+    persistAuditLogToFirestore(log).catch(console.error);
 
     return NextResponse.json({
       success: true,
@@ -121,6 +127,8 @@ export async function PATCH(req: NextRequest) {
     if (capacity) table.capacity = capacity;
     if (displayName) table.displayName = displayName;
     table.updatedAt = new Date().toISOString();
+
+    persistTableToFirestore(table).catch(console.error);
 
     return NextResponse.json({
       success: true,

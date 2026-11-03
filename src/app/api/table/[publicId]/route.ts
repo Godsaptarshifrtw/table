@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStore } from "@/lib/serverStore";
+import { syncFirestoreWithStore } from "@/lib/firestoreService";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ publicId: string }> }
 ) {
   try {
+    await syncFirestoreWithStore().catch(console.error);
     const { publicId } = await params;
     const store = getStore();
     const table = store.tables.find((t) => t.publicId === publicId && t.isActive);

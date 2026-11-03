@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStore } from "@/lib/serverStore";
 import { UpdateItemStatusSchema, UpdateOrderStatusSchema } from "@/lib/validation";
 import { OrderOverallStatus } from "@/types";
+import { persistOrderToFirestore, persistAuditLogToFirestore } from "@/lib/firestoreService";
 
 export async function PATCH(req: NextRequest) {
   try {
@@ -60,16 +61,20 @@ export async function PATCH(req: NextRequest) {
       order.status = derivedOverallStatus;
       order.updatedAt = new Date().toISOString();
 
-      store.auditLogs.push({
+      const auditLog = {
         id: `log_${Date.now()}`,
         restaurantId: store.restaurant.id,
         actorId: staffId || "kitchen_or_waiter",
         action: "item_status_updated",
-        resourceType: "order",
+        resourceType: "order" as const,
         resourceId: order.id,
         metadata: { itemId, newStatus, derivedOverallStatus },
         createdAt: new Date().toISOString(),
-      });
+      };
+      store.auditLogs.push(auditLog);
+
+      persistOrderToFirestore(order).catch(console.error);
+      persistAuditLogToFirestore(auditLog).catch(console.error);
 
       return NextResponse.json({
         success: true,
@@ -101,6 +106,8 @@ export async function PATCH(req: NextRequest) {
     if (status === "served") order.servedAt = nowIso;
     if (status === "cancelled") order.cancelledAt = nowIso;
     order.updatedAt = nowIso;
+
+    persistOrderToFirestore(order).catch(console.error);
 
     return NextResponse.json({
       success: true,

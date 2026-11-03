@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { getStore } from "@/lib/serverStore";
+import { syncFirestoreWithStore } from "@/lib/firestoreService";
 
 export async function GET() {
   try {
+    await syncFirestoreWithStore().catch(console.error);
     const store = getStore();
     return NextResponse.json({
       success: true,

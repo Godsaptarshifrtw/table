@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStore } from "@/lib/serverStore";
 import { CreateOrderRequestSchema } from "@/lib/validation";
 import { Order, OrderItem, TableSession } from "@/types";
+import { syncFirestoreWithStore, persistOrderToFirestore, persistTableToFirestore, persistAuditLogToFirestore } from "@/lib/firestoreService";
 
 export async function POST(req: NextRequest) {
   try {
@@ -142,12 +143,12 @@ export async function POST(req: NextRequest) {
     session.updatedAt = new Date().toISOString();
 
     // Audit log
-    store.auditLogs.push({
+    const auditLog = {
       id: `log_${Date.now()}`,
       restaurantId: store.restaurant.id,
       actorId: source === "qr" ? "customer" : "waiter",
       action: "order_created",
-      resourceType: "order",
+      resourceType: "order" as const,
       resourceId: newOrder.id,
       metadata: {
         orderNumber,
@@ -156,7 +157,13 @@ export async function POST(req: NextRequest) {
         itemCount: validatedItems.length,
       },
       createdAt: new Date().toISOString(),
-    });
+    };
+    store.auditLogs.push(auditLog);
+
+    // Asynchronously persist documents to Firebase Firestore
+    persistOrderToFirestore(newOrder, session).catch(console.error);
+    persistTableToFirestore(table).catch(console.error);
+    persistAuditLogToFirestore(auditLog).catch(console.error);
 
     return NextResponse.json({
       success: true,
@@ -172,6 +179,7 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
+    await syncFirestoreWithStore().catch(console.error);
     const { searchParams } = new URL(req.url);
     const tableId = searchParams.get("tableId");
     const sessionId = searchParams.get("sessionId");

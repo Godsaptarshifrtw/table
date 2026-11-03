@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStore } from "@/lib/serverStore";
 import { BillRequestSchema, CloseSessionSchema } from "@/lib/validation";
+import { persistSessionToFirestore, persistTableToFirestore, persistAuditLogToFirestore, syncFirestoreWithStore } from "@/lib/firestoreService";
 
 export async function GET(req: NextRequest) {
   try {
@@ -64,7 +65,9 @@ export async function PATCH(req: NextRequest) {
     if (table) {
       table.status = "awaiting_bill";
       table.updatedAt = new Date().toISOString();
+      persistTableToFirestore(table).catch(console.error);
     }
+    persistSessionToFirestore(session).catch(console.error);
 
     return NextResponse.json({
       success: true,
@@ -135,12 +138,12 @@ export async function POST(req: NextRequest) {
     table.updatedAt = new Date().toISOString();
 
     // Record audit log
-    store.auditLogs.push({
+    const auditLog = {
       id: `log_${Date.now()}`,
       restaurantId: store.restaurant.id,
       actorId: closedByStaffId,
       action: "session_closed_and_settled",
-      resourceType: "session",
+      resourceType: "session" as const,
       resourceId: session.id,
       metadata: {
         tableNumber: session.tableNumberSnapshot,
@@ -149,7 +152,12 @@ export async function POST(req: NextRequest) {
         paymentStatus,
       },
       createdAt: new Date().toISOString(),
-    });
+    };
+    store.auditLogs.push(auditLog);
+
+    persistSessionToFirestore(session).catch(console.error);
+    persistTableToFirestore(table).catch(console.error);
+    persistAuditLogToFirestore(auditLog).catch(console.error);
 
     return NextResponse.json({
       success: true,
