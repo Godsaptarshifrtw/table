@@ -23,6 +23,10 @@ export async function GET(
       ? store.sessions.find((s) => s.id === table.activeSessionId)
       : null;
 
+    const sessionOrders = currentSession
+      ? store.orders.filter((o) => o.sessionId === currentSession.id)
+      : [];
+
     return NextResponse.json({
       success: true,
       table: {
@@ -35,6 +39,7 @@ export async function GET(
         hasActiveSession: !!currentSession && currentSession.status !== "closed",
         activeSessionId: table.activeSessionId,
       },
+      activeOrders: sessionOrders,
       restaurant: store.restaurant,
       categories: store.categories.filter((c) => c.isActive),
       menuItems: store.menuItems.filter((i) => i.isAvailable),

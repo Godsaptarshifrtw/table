@@ -87,12 +87,12 @@ export default function CustomerMenuPage({
 
       setTable(data.table);
       setRestaurant(data.restaurant);
-      setCategories(data.categories);
-      setMenuItems(data.menuItems);
+      setCategories(data.categories || []);
+      setMenuItems(data.menuItems || []);
 
-      // If active session exists, fetch live orders
-      if (data.table?.activeSessionId) {
-        fetchSessionOrders(data.table.activeSessionId);
+      // If active session exists, set live orders immediately
+      if (data.activeOrders) {
+        setActiveOrders(data.activeOrders);
       }
     } catch (err: unknown) {
       setError("Unable to connect to restaurant server. Please try again.");
@@ -101,16 +101,25 @@ export default function CustomerMenuPage({
     }
   };
 
-  // Poll active orders for this table in real-time
+  // Poll active orders for this table only when status changes
   const fetchSessionOrders = async (sessionId: string) => {
     try {
-      const res = await fetch(`/api/sessions?sessionId=${sessionId}`);
+      const res = await fetch(`/api/sessions?sessionId=${sessionId}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) return;
       const data = await res.json();
-      if (res.ok && data.success) {
-        setActiveOrders(data.orders || []);
+      if (data?.success && Array.isArray(data.orders)) {
+        setActiveOrders((prev) => {
+          const prevSig = prev.map((o) => `${o.id}_${o.status}`).join(",");
+          const nextSig = data.orders.map((o: Order) => `${o.id}_${o.status}`).join(",");
+          // If no status changed, keep previous reference to prevent blinking & re-renders
+          if (prevSig === nextSig) return prev;
+          return data.orders;
+        });
       }
-    } catch (err) {
-      console.error("Order polling failed", err);
+    } catch {
+      // Silently ignore background polling blips
     }
   };
 
@@ -118,14 +127,22 @@ export default function CustomerMenuPage({
     loadTableAndMenu();
   }, [tablePublicId]);
 
-  // Periodic poll every 4s for live order progress & kitchen tracking
+  // Only poll if there are active orders waiting or cooking in the kitchen
+  const hasActiveCookingOrders = activeOrders.some(
+    (o) =>
+      o.status === "submitted" ||
+      o.status === "acknowledged" ||
+      o.status === "preparing" ||
+      o.status === "partially_ready"
+  );
+
   useEffect(() => {
-    if (!table?.activeSessionId) return;
+    if (!table?.activeSessionId || !hasActiveCookingOrders) return;
     const interval = setInterval(() => {
       fetchSessionOrders(table.activeSessionId!);
-    }, 4000);
+    }, 8000);
     return () => clearInterval(interval);
-  }, [table?.activeSessionId]);
+  }, [table?.activeSessionId, hasActiveCookingOrders]);
 
   // Cart Operations
   const addToCart = (item: MenuItem, notes?: string) => {
@@ -416,10 +433,7 @@ export default function CustomerMenuPage({
               </div>
               <div className="flex items-center gap-2 mt-1">
                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs font-black bg-blue-50 text-blue-700 border border-blue-200">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600"></span>
-                  </span>
+                  <span className="w-2 h-2 rounded-full bg-blue-600"></span>
                   Table {table.tableNumber}
                 </span>
                 <span className="text-xs text-slate-500 font-medium hidden sm:inline">
@@ -466,7 +480,7 @@ export default function CustomerMenuPage({
               <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-white/10">
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 rounded-2xl bg-blue-500/20 text-blue-400 border border-blue-400/30 flex items-center justify-center">
-                    <ChefHat className="w-5 h-5 animate-pulse" />
+                    <ChefHat className="w-5 h-5" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
