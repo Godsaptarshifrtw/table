@@ -30,12 +30,14 @@ export async function GET() {
         activeSession: activeSession || null,
         activeOrdersCount: activeOrders.length,
         currentSessionTotal: activeSession ? activeSession.total : 0,
+        customerPhone: activeSession?.customerPhone || null,
         sessionStartTime: activeSession ? activeSession.openedAt : null,
       };
     });
 
     return NextResponse.json({
       success: true,
+      restaurant: store.restaurant,
       tables: enrichedTables,
     });
   } catch (error: unknown) {

@@ -108,21 +108,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Table not found" }, { status: 404 });
     }
 
-    // Business rule: Check if there are active unserved orders still in prep
+    // Auto-mark all session orders and items as served upon bill settlement
     const sessionOrders = store.orders.filter((o) => o.sessionId === sessionId);
-    const hasUnresolvedOrders = sessionOrders.some(
-      (o) => o.status === "submitted" || o.status === "preparing" || o.status === "partially_ready"
-    );
-
-    if (hasUnresolvedOrders) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Cannot close table session: There are still items being prepared by the kitchen.",
-        },
-        { status: 400 }
-      );
-    }
+    sessionOrders.forEach((ord) => {
+      if (ord.status !== "cancelled") {
+        ord.status = "served";
+        ord.servedAt = ord.servedAt || new Date().toISOString();
+        ord.items.forEach((item) => {
+          if (item.preparationStatus !== "cancelled") {
+            item.preparationStatus = "served";
+            item.servedAt = item.servedAt || new Date().toISOString();
+          }
+        });
+      }
+    });
 
     // Close session atomically
     session.discount = discount || 0;
@@ -166,6 +165,7 @@ export async function POST(req: NextRequest) {
       message: "Session closed and settled successfully. Table is now available.",
       session,
       table,
+      orders: sessionOrders,
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Internal error";

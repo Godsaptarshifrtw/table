@@ -24,9 +24,13 @@ import {
   ChevronRight,
   Filter,
   Volume2,
+  Phone,
+  Printer,
+  Download,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { MenuCategory, MenuItem, Restaurant, Table, Order } from "@/types";
+import { InvoiceReceipt } from "@/components/InvoiceReceipt";
 
 interface CartItem {
   menuItem: MenuItem;
@@ -58,6 +62,16 @@ export default function CustomerMenuPage({
   const [orderSubmitting, setOrderSubmitting] = useState(false);
   const [billRequested, setBillRequested] = useState(false);
   const [waiterCalled, setWaiterCalled] = useState(false);
+  const [customerPhone, setCustomerPhone] = useState<string>("");
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+
+  // Load saved phone number on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("customer_phone");
+      if (saved) setCustomerPhone(saved);
+    } catch {}
+  }, []);
 
   // Live Active Orders for this Table
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
@@ -198,11 +212,24 @@ export default function CustomerMenuPage({
   // Manual Order Submission
   const handlePlaceOrder = async () => {
     if (!table || cart.length === 0) return;
+
+    // Validate 10-digit mobile number requirement
+    const cleanPhone = customerPhone.replace(/\D/g, "");
+    if (!cleanPhone || cleanPhone.length < 10) {
+      alert("Please enter a valid 10-digit mobile number for your digital bill.");
+      return;
+    }
+
+    try {
+      localStorage.setItem("customer_phone", cleanPhone);
+    } catch {}
+
     setOrderSubmitting(true);
     try {
       const orderPayload = {
         restaurantId: restaurant?.id || "rest_default_01",
         tablePublicId,
+        customerPhone: cleanPhone,
         source: "qr",
         items: cart.map((c) => ({
           menuItemId: c.menuItem.id,
@@ -443,8 +470,20 @@ export default function CustomerMenuPage({
             </div>
           </div>
 
-          {/* Quick Actions (Call Waiter + Request Bill) */}
+          {/* Quick Actions (Call Waiter + Request Bill + View Invoice) */}
           <div className="flex items-center space-x-2">
+            {activeOrders.length > 0 && (
+              <button
+                onClick={() => setShowInvoiceModal(true)}
+                className="flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-black text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 transition active:scale-95 shadow-2xs"
+                title="View your official restaurant tax invoice"
+              >
+                <Receipt className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="hidden sm:inline">View Bill</span>
+                <span className="sm:hidden">Bill</span>
+              </button>
+            )}
+
             <button
               onClick={handleCallWaiter}
               className="flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition active:scale-95 shadow-2xs"
@@ -544,6 +583,15 @@ export default function CustomerMenuPage({
                         <strong className="text-white font-extrabold">{stage.location}</strong>
                       </span>
                     </div>
+
+                    {/* View Tax Bill Button */}
+                    <button
+                      onClick={() => setShowInvoiceModal(true)}
+                      className="w-full mt-3 flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-2xl text-xs font-black transition border border-emerald-500/30"
+                    >
+                      <Receipt className="w-4 h-4 text-emerald-400" />
+                      <span>View &amp; Download Itemized Tax Invoice (₹{totalActiveExpenditure})</span>
+                    </button>
                   </div>
                 );
               })()}
@@ -1038,6 +1086,35 @@ export default function CustomerMenuPage({
               ))}
             </div>
 
+            {/* Mobile Number Capture (Requirement: Take phone number when ordering) */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/90 rounded-2xl p-3.5 my-2">
+              <label className="block text-xs font-black text-slate-900 mb-1.5 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 text-blue-600" />
+                  Your Mobile Number <span className="text-rose-500">*</span>
+                </span>
+                <span className="text-[10px] text-blue-700 bg-blue-100 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  For Digital Bill
+                </span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-xs font-extrabold text-slate-500">
+                  +91
+                </div>
+                <input
+                  type="tel"
+                  maxLength={10}
+                  placeholder="Enter 10-digit mobile number"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, ""))}
+                  className="w-full bg-white border border-slate-300 focus:border-blue-600 rounded-xl pl-12 pr-3 py-2 text-sm font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition shadow-2xs"
+                />
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Your itemized tax bill and live order status will be linked to this number.
+              </p>
+            </div>
+
             {/* Bill Breakdown in INR */}
             <div className="border-t border-slate-100 pt-3.5 space-y-2 text-xs text-slate-500">
               <div className="flex justify-between font-medium">
@@ -1082,6 +1159,18 @@ export default function CustomerMenuPage({
             </button>
           </div>
         </div>
+      )}
+      {/* Official Tax Invoice & Bill Modal */}
+      {showInvoiceModal && (
+        <InvoiceReceipt
+          restaurant={restaurant}
+          tableNumber={table?.tableNumber || ""}
+          orders={activeOrders}
+          customerPhone={customerPhone || activeOrders[0]?.customerPhone}
+          paymentMethod="Cash"
+          paymentStatus={activeOrders.every((o) => o.status === "served") ? "Paid" : "Pending Settlement"}
+          onClose={() => setShowInvoiceModal(false)}
+        />
       )}
     </div>
   );

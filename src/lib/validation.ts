@@ -9,6 +9,7 @@ export const CreateOrderRequestItemSchema = z.object({
 export const CreateOrderRequestSchema = z.object({
   restaurantId: z.string().optional(),
   tablePublicId: z.string().min(1, "Table ID is required"),
+  customerPhone: z.string().max(20).optional(),
   items: z.array(CreateOrderRequestItemSchema).min(1, "At least one item is required to place an order"),
   source: z.enum(["qr", "waiter"]).default("qr"),
   specialInstructions: z.string().max(500).optional(),

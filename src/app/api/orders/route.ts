@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { tablePublicId, items, source, specialInstructions, idempotencyKey } = parseResult.data;
+    const { tablePublicId, items, source, specialInstructions, idempotencyKey, customerPhone } = parseResult.data;
     const store = getStore();
 
     // 1. Idempotency check: prevent duplicate submissions
@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
         restaurantId: table.restaurantId,
         tableId: table.id,
         tableNumberSnapshot: table.tableNumber,
+        customerPhone: customerPhone || null,
         status: "open",
         assignedWaiterId: table.assignedWaiterId || null,
         openedAt: new Date().toISOString(),
@@ -72,6 +73,8 @@ export async function POST(req: NextRequest) {
       table.activeSessionId = newSessionId;
       table.status = "occupied";
       table.updatedAt = new Date().toISOString();
+    } else if (customerPhone && !session.customerPhone) {
+      session.customerPhone = customerPhone;
     }
 
     // 4. Validate requested items against trusted backend menu data & snapshot prices
@@ -120,6 +123,7 @@ export async function POST(req: NextRequest) {
       tableId: table.id,
       tableNumberSnapshot: table.tableNumber,
       sessionId: session.id,
+      customerPhone: customerPhone || session.customerPhone || null,
       orderNumber,
       source,
       status: "submitted",

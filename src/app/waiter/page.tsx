@@ -166,6 +166,24 @@ export default function WaiterDashboardPage() {
     }
   };
 
+  const handleMarkOrderAllServed = async (orderId: string) => {
+    try {
+      await fetch("/api/orders/status", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId,
+          status: "served",
+          staffId: "waiter_01",
+        }),
+      });
+      loadData();
+      if (selectedTable) handleSelectTable(selectedTable);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleSettleAndClose = async () => {
     if (!activeSession || !selectedTable) return;
     try {
@@ -362,10 +380,25 @@ export default function WaiterDashboardPage() {
                             <span className="text-[10px] uppercase font-bold text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
                               {ord.source}
                             </span>
+                            {ord.customerPhone && (
+                              <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
+                                📞 {ord.customerPhone}
+                              </span>
+                            )}
                           </div>
-                          <span className="text-slate-400">
-                            {formatRelativeTime(ord.createdAt)}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            {ord.items.some((i) => i.preparationStatus !== "served") && (
+                              <button
+                                onClick={() => handleMarkOrderAllServed(ord.id)}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase rounded-lg transition shadow-2xs"
+                              >
+                                Serve Ticket
+                              </button>
+                            )}
+                            <span className="text-slate-400">
+                              {formatRelativeTime(ord.createdAt)}
+                            </span>
+                          </div>
                         </div>
 
                         <div className="py-3 space-y-2.5">
@@ -401,12 +434,16 @@ export default function WaiterDashboardPage() {
                                   {item.preparationStatus}
                                 </span>
 
-                                {item.preparationStatus === "ready" && (
+                                {item.preparationStatus !== "served" && (
                                   <button
                                     onClick={() => handleMarkServed(ord.id, item.id)}
-                                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] uppercase rounded-lg transition shadow-2xs"
+                                    className={`px-2.5 py-1 text-white font-bold text-[10px] uppercase rounded-lg transition shadow-2xs ${
+                                      item.preparationStatus === "ready"
+                                        ? "bg-emerald-600 hover:bg-emerald-700"
+                                        : "bg-blue-600 hover:bg-blue-700"
+                                    }`}
                                   >
-                                    Mark Served
+                                    Serve
                                   </button>
                                 )}
                               </div>

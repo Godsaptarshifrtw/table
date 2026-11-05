@@ -29,11 +29,15 @@ import {
   Sparkles,
   UserCheck,
   Percent,
+  Phone,
+  Printer,
+  Download,
 } from "lucide-react";
 import { StaffNavbar } from "@/components/StaffNavbar";
 import { TableQRModal } from "@/components/TableQRModal";
-import { Table, Order, TableSession, MenuItem, MenuCategory, Staff } from "@/types";
+import { Table, Order, TableSession, MenuItem, MenuCategory, Staff, Restaurant } from "@/types";
 import { formatCurrency, formatRelativeTime } from "@/lib/utils";
+import { InvoiceReceipt } from "@/components/InvoiceReceipt";
 
 export default function AdminDashboardPage() {
   const [tables, setTables] = useState<Table[]>([]);
@@ -41,12 +45,20 @@ export default function AdminDashboardPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [staffList, setStaffList] = useState<Staff[]>([]);
+  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Modals
   const [qrModalTable, setQrModalTable] = useState<Table | null>(null);
   const [isNewTableOpen, setIsNewTableOpen] = useState(false);
   const [selectedTableForDetails, setSelectedTableForDetails] = useState<Table | null>(null);
+  const [invoiceModalData, setInvoiceModalData] = useState<{
+    table: Table;
+    orders: Order[];
+    customerPhone?: string | null;
+    paymentMethod?: string;
+    paymentStatus?: string;
+  } | null>(null);
 
   // New Table Form
   const [newTableNum, setNewTableNum] = useState("");
@@ -72,7 +84,10 @@ export default function AdminDashboardPage() {
       const oData = await oRes.json();
       const mData = await mRes.json();
 
-      if (tData.success) setTables(tData.tables);
+      if (tData.success) {
+        setTables(tData.tables);
+        if (tData.restaurant) setRestaurant(tData.restaurant);
+      }
       if (oData.success) setOrders(oData.orders);
       if (mData.success) {
         setMenuItems(mData.menuItems);
@@ -150,21 +165,65 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // Close Session & Settle Table
-  const handleSettleAndFreeTable = async (table: Table) => {
-    if (!confirm(`Are you sure you want to settle the bill and mark Table ${table.tableNumber} available?`)) return;
+  // Close Session, Collect Cash & Settle Table
+  const handleSettleAndFreeTable = async (table: Table, paymentMethod = "Cash") => {
+    const tableOrders = orders.filter(
+      (o) => o.tableId === table.id && o.status !== "cancelled"
+    );
+    const orderTotal = tableOrders.reduce((sum, o) => sum + o.total, 0);
+    const phone = tableOrders.find((o) => o.customerPhone)?.customerPhone || (table as any).customerPhone;
+
+    if (
+      !confirm(
+        `Confirm receiving ${formatCurrency(orderTotal)} in ${paymentMethod.toUpperCase()} & settle Table ${table.tableNumber}?`
+      )
+    ) {
+      return;
+    }
+
     try {
-      const res = await fetch("/api/tables", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tableId: table.id, status: "available" }),
-      });
-      if (res.ok) {
-        setSelectedTableForDetails(null);
-        loadData();
+      if (table.activeSessionId) {
+        const res = await fetch("/api/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: table.activeSessionId,
+            tableId: table.id,
+            closedByStaffId: "staff_admin",
+            paymentMethod: paymentMethod.toLowerCase(),
+            paymentStatus: "paid",
+            discount: 0,
+          }),
+        });
+        if (!res.ok) {
+          // Fallback to table status update if needed
+          await fetch("/api/tables", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tableId: table.id, status: "available" }),
+          });
+        }
+      } else {
+        await fetch("/api/tables", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tableId: table.id, status: "available" }),
+        });
       }
+
+      // Automatically present downloadable & printable receipt for admin and customer records
+      setInvoiceModalData({
+        table,
+        orders: tableOrders,
+        customerPhone: phone,
+        paymentMethod: paymentMethod,
+        paymentStatus: "Paid",
+      });
+
+      setSelectedTableForDetails(null);
+      loadData();
     } catch (err) {
-      alert("Could not settle table");
+      alert("Could not settle table. Please try again.");
     }
   };
 
@@ -275,22 +334,22 @@ export default function AdminDashboardPage() {
 
         {/* Live Executive Metric Cards (Financials & Floor Capacity) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {/* Revenue */}
+          {/* Today's Total Money */}
           <div className="bg-white border border-slate-200/90 p-5 rounded-3xl shadow-xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
-                <span>Today&apos;s Gross Sales</span>
+                <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">Today&apos;s Total Money</span>
                 <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
                   <DollarSign className="w-4 h-4" />
                 </div>
               </div>
-              <div className="text-2xl font-black text-slate-900 mt-2">
+              <div className="text-2xl sm:text-3xl font-black text-emerald-600 mt-2">
                 {formatCurrency(todaySales)}
               </div>
             </div>
             <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-              <span>{validOrders.length} orders placed</span>
-              <span className="font-bold text-emerald-600">AOV: {formatCurrency(averageOrderValue)}</span>
+              <span className="font-bold text-slate-700">{validOrders.length} orders placed</span>
+              <span className="font-bold text-emerald-600">GST: {formatCurrency(totalTaxCollected)}</span>
             </div>
           </div>
 
@@ -990,6 +1049,7 @@ export default function AdminDashboardPage() {
               const subtotal = tableOrders.reduce((sum, o) => sum + o.subtotal, 0);
               const tax = tableOrders.reduce((sum, o) => sum + (o.tax || 0), 0);
               const total = tableOrders.reduce((sum, o) => sum + o.total, 0);
+              const phone = tableOrders.find((o) => o.customerPhone)?.customerPhone || (selectedTableForDetails as any).customerPhone;
 
               return (
                 <div className="flex-1 overflow-y-auto py-4 space-y-4">
@@ -1019,6 +1079,14 @@ export default function AdminDashboardPage() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Customer Phone badge if captured */}
+                  {phone && (
+                    <div className="flex items-center gap-2 p-3 bg-blue-50/80 border border-blue-200 rounded-2xl text-xs text-blue-900 font-bold">
+                      <Phone className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span>Customer Mobile: <strong className="text-blue-800 font-mono tracking-wide">+91 {phone}</strong></span>
+                    </div>
+                  )}
 
                   {/* Active Orders List */}
                   <div>
@@ -1069,22 +1137,40 @@ export default function AdminDashboardPage() {
                     </div>
                   )}
 
-                  {/* Actions */}
-                  <div className="pt-2 flex gap-2">
+                  {/* Actions (View & Print Bill + Take Cash & Settle) */}
+                  <div className="pt-2 flex flex-col sm:flex-row gap-2">
                     <button
                       onClick={() => setQrModalTable(selectedTableForDetails)}
-                      className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+                      className="py-3 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold transition flex items-center justify-center gap-1.5"
                     >
                       <QrCode className="w-4 h-4 text-blue-600" />
-                      <span>View QR</span>
+                      <span>QR</span>
                     </button>
 
+                    {tableOrders.length > 0 && (
+                      <button
+                        onClick={() => {
+                          setInvoiceModalData({
+                            table: selectedTableForDetails,
+                            orders: tableOrders,
+                            customerPhone: phone,
+                            paymentMethod: "Cash",
+                            paymentStatus: tableOrders.every((o) => o.status === "served") ? "Paid" : "Pending Settlement",
+                          });
+                        }}
+                        className="flex-1 py-3 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-2xl text-xs font-black transition flex items-center justify-center gap-1.5"
+                      >
+                        <Receipt className="w-4 h-4 text-blue-600" />
+                        <span>View / Print Bill</span>
+                      </button>
+                    )}
+
                     <button
-                      onClick={() => handleSettleAndFreeTable(selectedTableForDetails)}
-                      className="flex-2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition shadow-md shadow-emerald-500/25 flex items-center justify-center gap-1.5"
+                      onClick={() => handleSettleAndFreeTable(selectedTableForDetails, "Cash")}
+                      className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition shadow-md shadow-emerald-500/25 flex items-center justify-center gap-1.5"
                     >
-                      <Receipt className="w-4 h-4" />
-                      <span>Settle Bill &amp; Free Table</span>
+                      <DollarSign className="w-4 h-4" />
+                      <span>Take Cash &amp; Settle ({formatCurrency(total)})</span>
                     </button>
                   </div>
                 </div>
@@ -1178,6 +1264,18 @@ export default function AdminDashboardPage() {
             </form>
           </div>
         </div>
+      )}
+      {/* MODAL 4: OFFICIAL TAX INVOICE & BILL PRINT/DOWNLOAD */}
+      {invoiceModalData && (
+        <InvoiceReceipt
+          restaurant={restaurant}
+          tableNumber={invoiceModalData.table.tableNumber}
+          orders={invoiceModalData.orders}
+          customerPhone={invoiceModalData.customerPhone}
+          paymentMethod={invoiceModalData.paymentMethod || "Cash"}
+          paymentStatus={invoiceModalData.paymentStatus || "Paid"}
+          onClose={() => setInvoiceModalData(null)}
+        />
       )}
     </div>
   );

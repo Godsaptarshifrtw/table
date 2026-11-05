@@ -45,6 +45,20 @@ export async function GET(
         hasActiveSession: !!currentSession && currentSession.status !== "closed",
         activeSessionId: table.activeSessionId,
       },
+      currentSession: currentSession
+        ? {
+            id: currentSession.id,
+            status: currentSession.status,
+            customerPhone: currentSession.customerPhone,
+            subtotal: currentSession.subtotal,
+            tax: currentSession.tax,
+            total: currentSession.total,
+            paymentStatus: currentSession.paymentStatus,
+            paymentMethod: currentSession.paymentMethod,
+            openedAt: currentSession.openedAt,
+            closedAt: currentSession.closedAt,
+          }
+        : null,
       activeOrders: sessionOrders,
       restaurant: store.restaurant,
       categories: store.categories.filter((c) => c.isActive),

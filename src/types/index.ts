@@ -85,6 +85,7 @@ export interface TableSession {
   restaurantId: string;
   tableId: string;
   tableNumberSnapshot: string;
+  customerPhone?: string | null;
   status: SessionStatus;
   assignedWaiterId?: string | null;
   openedAt: string;
@@ -121,6 +122,7 @@ export interface Order {
   tableId: string;
   tableNumberSnapshot: string;
   sessionId: string;
+  customerPhone?: string | null;
   orderNumber: string; // e.g. "#1024"
   source: OrderSource;
   status: OrderOverallStatus;

@@ -103,7 +103,15 @@ export async function PATCH(req: NextRequest) {
     if (status === "acknowledged") order.acceptedAt = nowIso;
     if (status === "preparing") order.preparingAt = nowIso;
     if (status === "ready") order.readyAt = nowIso;
-    if (status === "served") order.servedAt = nowIso;
+    if (status === "served") {
+      order.servedAt = nowIso;
+      order.items.forEach((item) => {
+        if (item.preparationStatus !== "cancelled") {
+          item.preparationStatus = "served";
+          item.servedAt = item.servedAt || nowIso;
+        }
+      });
+    }
     if (status === "cancelled") order.cancelledAt = nowIso;
     order.updatedAt = nowIso;
 
